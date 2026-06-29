@@ -16,6 +16,7 @@ from drive_publico import baixar_imagens_recentes
 from analisador_roi import selecionar_top_roi
 from colagem import criar_colagem
 from telegram_post import enviar_post
+from historico import filtrar_nao_usadas, registrar_usadas
 
 
 def limpar_temp():
@@ -41,24 +42,46 @@ def executar():
 
         print(f"{len(imagens)} imagens baixadas.")
 
+        imagens_nao_usadas = filtrar_nao_usadas(imagens)
+
+        print(f"{len(imagens_nao_usadas)} imagens novas ainda não usadas.")
+
+        if len(imagens_nao_usadas) >= QUANTIDADE_COLAGEM:
+            print("Usando apenas imagens novas.")
+            imagens_para_analisar = imagens_nao_usadas
+            deve_registrar_historico = True
+        else:
+            print("Poucas imagens novas. Reutilizando imagens existentes.")
+            imagens_para_analisar = imagens
+            deve_registrar_historico = False
+
         print("Analisando porcentagens verdes...")
-        top = selecionar_top_roi(imagens, quantidade=QUANTIDADE_COLAGEM)
+        top = selecionar_top_roi(
+            imagens_para_analisar,
+            quantidade=QUANTIDADE_COLAGEM
+        )
 
         print("Top imagens selecionadas:")
         for item in top:
             print(f"{item['nome']} | ROI: {item['roi']}%")
 
-        if len(top) < 4:
-            print("Menos de 4 imagens válidas encontradas. Post cancelado.")
+        if len(top) < QUANTIDADE_COLAGEM:
+            print("Menos imagens do que o necessário para montar a colagem.")
             return
 
-        print("Criando colagem...")
+        print("Criando colagem com layout variável...")
         colagem = criar_colagem(top)
 
         print(f"Colagem criada: {colagem}")
 
         print("Enviando post no Telegram...")
         asyncio.run(enviar_post(colagem))
+
+        if deve_registrar_historico:
+            registrar_usadas(top)
+            print("Histórico atualizado com imagens novas.")
+        else:
+            print("Post feito com imagens reutilizadas. Histórico não alterado.")
 
         print("Post enviado com sucesso.")
 
