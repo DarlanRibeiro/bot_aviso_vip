@@ -1,0 +1,7 @@
+requests
+python-telegram-bot==21.6
+pillow
+apscheduler
+easyocr
+opencv-python-headless
+numpy
