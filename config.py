@@ -10,10 +10,12 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
 INTERVALO_HORAS = int(os.getenv("INTERVALO_HORAS", "4"))
-
 LIMITE_IMAGENS_RECENTES = int(os.getenv("LIMITE_IMAGENS_RECENTES", "25"))
 QUANTIDADE_COLAGEM = int(os.getenv("QUANTIDADE_COLAGEM", "4"))
 
 PASTA_TEMP = "/tmp/bot_aviso_vip"
 PASTA_PRINTS = f"{PASTA_TEMP}/prints"
 PASTA_COLAGENS = f"{PASTA_TEMP}/colagens"
+
+PASTA_DATA = "/app/data"
+ARQUIVO_HISTORICO = f"{PASTA_DATA}/historico_usados.json"
