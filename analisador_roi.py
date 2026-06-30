@@ -3,18 +3,21 @@ import cv2
 import easyocr
 import numpy as np
 
+from config import ROI_MINIMO
+
 reader = easyocr.Reader(["en"], gpu=False)
 
 
 def extrair_porcentagens(texto):
-    padrao = r"(\d{1,5}(?:[.,]\d{1,2})?)\s*%"
+    padrao = r"(\+?\d{1,5}(?:[.,]\d{1,2})?)\s*%"
     encontrados = re.findall(padrao, texto)
 
     valores = []
 
     for item in encontrados:
         try:
-            valores.append(float(item.replace(",", ".")))
+            valor = float(item.replace("+", "").replace(",", "."))
+            valores.append(valor)
         except ValueError:
             pass
 
@@ -29,29 +32,24 @@ def destacar_verde(caminho):
 
     hsv = cv2.cvtColor(imagem, cv2.COLOR_BGR2HSV)
 
-    verde_baixo = np.array([35, 35, 35])
+    verde_baixo = np.array([35, 30, 30])
     verde_alto = np.array([95, 255, 255])
 
     mascara = cv2.inRange(hsv, verde_baixo, verde_alto)
     resultado = cv2.bitwise_and(imagem, imagem, mask=mascara)
 
     cinza = cv2.cvtColor(resultado, cv2.COLOR_BGR2GRAY)
-    cinza = cv2.resize(cinza, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
+    cinza = cv2.resize(cinza, None, fx=2.8, fy=2.8, interpolation=cv2.INTER_CUBIC)
 
     return cinza
 
 
 def analisar_roi(imagem_info):
     caminho = imagem_info["caminho"]
-
     imagem_processada = destacar_verde(caminho)
 
     if imagem_processada is None:
-        return {
-            **imagem_info,
-            "roi": 0,
-            "texto_ocr": "",
-        }
+        return {**imagem_info, "roi": 0, "texto_ocr": "", "valida": False}
 
     resultado = reader.readtext(imagem_processada, detail=0)
     texto = " ".join(resultado)
@@ -63,6 +61,7 @@ def analisar_roi(imagem_info):
         **imagem_info,
         "roi": maior_roi,
         "texto_ocr": texto,
+        "valida": maior_roi >= ROI_MINIMO,
     }
 
 
@@ -71,7 +70,13 @@ def selecionar_top_roi(imagens, quantidade=4):
 
     for imagem in imagens:
         try:
-            analisadas.append(analisar_roi(imagem))
+            item = analisar_roi(imagem)
+
+            if item["valida"]:
+                analisadas.append(item)
+            else:
+                print(f"Ignorada: {imagem.get('nome')} | ROI: {item['roi']}%")
+
         except Exception as erro:
             print(f"Erro analisando {imagem.get('nome')}: {erro}")
 
