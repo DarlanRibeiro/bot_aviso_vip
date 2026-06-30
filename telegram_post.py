@@ -22,10 +22,10 @@ async def enviar_post(caminho_imagem):
     teclado = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "🥇 Grupo VIP | Saiba mais",
+                text="🥇 Grupo VIP | Saiba mais",
                 url=TELEGRAM_LINK_VIP,
             )
-        ],
+        ]
     ])
 
     with open(caminho_imagem, "rb") as foto:
