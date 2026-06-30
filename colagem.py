@@ -4,6 +4,9 @@ from datetime import datetime
 from PIL import Image, ImageOps, ImageDraw
 
 from config import PASTA_COLAGENS
+from camera import camera_virtual
+
+FUNDO = (5, 9, 22)
 
 
 def abrir_e_corrigir(caminho):
@@ -11,87 +14,43 @@ def abrir_e_corrigir(caminho):
     return ImageOps.exif_transpose(img)
 
 
-def encaixar_crop(img, tamanho, centro=(0.5, 0.5)):
-    return ImageOps.fit(
-        img,
-        tamanho,
-        method=Image.Resampling.LANCZOS,
-        centering=centro,
+def arredondar(img, raio=22):
+    w, h = img.size
+
+    mask = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle([0, 0, w, h], radius=raio, fill=255)
+
+    card = Image.new("RGB", (w, h), FUNDO)
+    card.paste(img, (0, 0), mask)
+
+    return card, mask
+
+
+def colar_card(fundo, item, x, y, w, h, destaque=False):
+    img = abrir_e_corrigir(item["caminho"])
+
+    card_img = camera_virtual(
+        img=img,
+        tamanho=(w, h),
+        bbox_foco=item.get("bbox_foco"),
+        bbox_moeda=item.get("bbox_moeda"),
+        destaque=destaque,
     )
 
-
-def borda(draw, x, y, w, h, roi, destaque=False):
-    cor = (0, 255, 150)
-    largura = 7 if destaque else 4
-
-    draw.rounded_rectangle(
-        [x, y, x + w, y + h],
-        radius=30,
-        outline=cor,
-        width=largura,
-    )
-
-    etiqueta = f"+{roi:.2f}%"
-
-    box_w = 260 if destaque else 225
-    box_h = 72 if destaque else 60
-
-    draw.rounded_rectangle(
-        [x + 18, y + 18, x + 18 + box_w, y + 18 + box_h],
-        radius=18,
-        fill=(0, 0, 0),
-    )
-
-    draw.text(
-        (x + 38, y + 38),
-        etiqueta,
-        fill=cor,
-    )
+    card, mask = arredondar(card_img, raio=22)
+    fundo.paste(card, (x, y), mask)
 
 
-def layout_direita_destaque(fundo, imagens):
+def layout_01_topo(fundo, imagens):
+    margem = 10
+    espaco = 8
     largura, altura = fundo.size
-    draw = ImageDraw.Draw(fundo)
-
-    margem = 26
-    espaco = 16
-
-    esquerda_w = 450
-    direita_w = largura - esquerda_w - margem * 2 - espaco
-    bloco_h = (altura - margem * 2 - espaco * 2) // 3
-
-    for i, item in enumerate(imagens[1:4]):
-        x = margem
-        y = margem + i * (bloco_h + espaco)
-        img = encaixar_crop(abrir_e_corrigir(item["caminho"]), (esquerda_w, bloco_h))
-        fundo.paste(img, (x, y))
-        borda(draw, x, y, esquerda_w, bloco_h, item["roi"])
-
-    x = margem + esquerda_w + espaco
-    y = margem
-    img = encaixar_crop(abrir_e_corrigir(imagens[0]["caminho"]), (direita_w, altura - margem * 2))
-    fundo.paste(img, (x, y))
-    borda(draw, x, y, direita_w, altura - margem * 2, imagens[0]["roi"], destaque=True)
-
-    return fundo
-
-
-def layout_topo_destaque(fundo, imagens):
-    largura, altura = fundo.size
-    draw = ImageDraw.Draw(fundo)
-
-    margem = 26
-    espaco = 16
 
     grande_w = largura - margem * 2
-    grande_h = 610
+    grande_h = 620
 
-    x = margem
-    y = margem
-
-    img = encaixar_crop(abrir_e_corrigir(imagens[0]["caminho"]), (grande_w, grande_h))
-    fundo.paste(img, (x, y))
-    borda(draw, x, y, grande_w, grande_h, imagens[0]["roi"], destaque=True)
+    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
 
     pequeno_w = (largura - margem * 2 - espaco * 2) // 3
     pequeno_h = altura - margem * 2 - grande_h - espaco
@@ -99,64 +58,129 @@ def layout_topo_destaque(fundo, imagens):
 
     for i, item in enumerate(imagens[1:4]):
         x = margem + i * (pequeno_w + espaco)
-        img = encaixar_crop(abrir_e_corrigir(item["caminho"]), (pequeno_w, pequeno_h))
-        fundo.paste(img, (x, y))
-        borda(draw, x, y, pequeno_w, pequeno_h, item["roi"])
+        colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
 
     return fundo
 
 
-def layout_esquerda_destaque(fundo, imagens):
+def layout_02_esquerda(fundo, imagens):
+    margem = 10
+    espaco = 8
     largura, altura = fundo.size
-    draw = ImageDraw.Draw(fundo)
 
-    margem = 26
-    espaco = 16
+    grande_w = 650
+    grande_h = altura - margem * 2
 
-    esquerda_w = 640
-    direita_w = largura - esquerda_w - margem * 2 - espaco
-    bloco_h = (altura - margem * 2 - espaco * 2) // 3
+    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
 
-    x = margem
-    y = margem
+    pequeno_w = largura - margem * 2 - grande_w - espaco
+    pequeno_h = (altura - margem * 2 - espaco * 2) // 3
 
-    img = encaixar_crop(abrir_e_corrigir(imagens[0]["caminho"]), (esquerda_w, altura - margem * 2))
-    fundo.paste(img, (x, y))
-    borda(draw, x, y, esquerda_w, altura - margem * 2, imagens[0]["roi"], destaque=True)
-
-    x = margem + esquerda_w + espaco
+    x = margem + grande_w + espaco
 
     for i, item in enumerate(imagens[1:4]):
-        y = margem + i * (bloco_h + espaco)
-        img = encaixar_crop(abrir_e_corrigir(item["caminho"]), (direita_w, bloco_h))
-        fundo.paste(img, (x, y))
-        borda(draw, x, y, direita_w, bloco_h, item["roi"])
+        y = margem + i * (pequeno_h + espaco)
+        colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
 
     return fundo
 
 
-def layout_2x2_com_destaque(fundo, imagens):
+def layout_03_direita(fundo, imagens):
+    margem = 10
+    espaco = 8
     largura, altura = fundo.size
-    draw = ImageDraw.Draw(fundo)
 
-    margem = 26
-    espaco = 16
+    pequeno_w = 390
+    grande_w = largura - margem * 2 - pequeno_w - espaco
+    grande_h = altura - margem * 2
 
-    bloco_w = (largura - margem * 2 - espaco) // 2
-    bloco_h = (altura - margem * 2 - espaco) // 2
+    x_grande = margem + pequeno_w + espaco
+    colar_card(fundo, imagens[0], x_grande, margem, grande_w, grande_h, True)
 
-    posicoes = [
-        (margem, margem),
-        (margem + bloco_w + espaco, margem),
-        (margem, margem + bloco_h + espaco),
-        (margem + bloco_w + espaco, margem + bloco_h + espaco),
-    ]
+    pequeno_h = (altura - margem * 2 - espaco * 2) // 3
 
-    for i, item in enumerate(imagens[:4]):
-        x, y = posicoes[i]
-        img = encaixar_crop(abrir_e_corrigir(item["caminho"]), (bloco_w, bloco_h))
-        fundo.paste(img, (x, y))
-        borda(draw, x, y, bloco_w, bloco_h, item["roi"], destaque=(i == 0))
+    for i, item in enumerate(imagens[1:4]):
+        x = margem
+        y = margem + i * (pequeno_h + espaco)
+        colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
+
+    return fundo
+
+
+def layout_04_centro(fundo, imagens):
+    margem = 10
+    espaco = 8
+    largura, altura = fundo.size
+
+    topo_h = 250
+    meio_h = 550
+    baixo_h = altura - margem * 2 - topo_h - meio_h - espaco * 2
+
+    pequeno_w = (largura - margem * 2 - espaco) // 2
+
+    colar_card(fundo, imagens[1], margem, margem, pequeno_w, topo_h)
+    colar_card(
+        fundo,
+        imagens[2],
+        margem + pequeno_w + espaco,
+        margem,
+        pequeno_w,
+        topo_h,
+    )
+
+    y_meio = margem + topo_h + espaco
+    colar_card(fundo, imagens[0], margem, y_meio, largura - margem * 2, meio_h, True)
+
+    y_baixo = y_meio + meio_h + espaco
+    colar_card(fundo, imagens[3], margem, y_baixo, largura - margem * 2, baixo_h)
+
+    return fundo
+
+
+def layout_05_mosaico(fundo, imagens):
+    margem = 10
+    espaco = 8
+    largura, altura = fundo.size
+
+    grande_h = 570
+    pequeno_h = altura - margem * 2 - grande_h - espaco
+
+    esquerda_w = 680
+    direita_w = largura - margem * 2 - esquerda_w - espaco
+
+    colar_card(fundo, imagens[0], margem, margem, esquerda_w, grande_h, True)
+
+    x_dir = margem + esquerda_w + espaco
+    meio_h = (grande_h - espaco) // 2
+
+    colar_card(fundo, imagens[1], x_dir, margem, direita_w, meio_h)
+    colar_card(fundo, imagens[2], x_dir, margem + meio_h + espaco, direita_w, meio_h)
+
+    y_baixo = margem + grande_h + espaco
+    colar_card(fundo, imagens[3], margem, y_baixo, largura - margem * 2, pequeno_h)
+
+    return fundo
+
+
+def layout_06_topo_duplo(fundo, imagens):
+    margem = 10
+    espaco = 8
+    largura, altura = fundo.size
+
+    grande_h = 600
+    baixo_h = altura - margem * 2 - grande_h - espaco
+
+    grande_w = int((largura - margem * 2 - espaco) * 0.68)
+    lateral_w = largura - margem * 2 - grande_w - espaco
+
+    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
+    colar_card(fundo, imagens[1], margem + grande_w + espaco, margem, lateral_w, grande_h)
+
+    pequeno_w = (largura - margem * 2 - espaco) // 2
+    y = margem + grande_h + espaco
+
+    colar_card(fundo, imagens[2], margem, y, pequeno_w, baixo_h)
+    colar_card(fundo, imagens[3], margem + pequeno_w + espaco, y, pequeno_w, baixo_h)
 
     return fundo
 
@@ -164,7 +188,11 @@ def layout_2x2_com_destaque(fundo, imagens):
 def criar_colagem(imagens_top):
     os.makedirs(PASTA_COLAGENS, exist_ok=True)
 
-    imagens_ordenadas = sorted(imagens_top, key=lambda x: x["roi"], reverse=True)
+    imagens_ordenadas = sorted(
+        imagens_top,
+        key=lambda x: x["roi"],
+        reverse=True,
+    )
 
     maior = imagens_ordenadas[0]
     demais = imagens_ordenadas[1:]
@@ -172,13 +200,15 @@ def criar_colagem(imagens_top):
 
     imagens = [maior] + demais
 
-    fundo = Image.new("RGB", (1080, 1080), (5, 9, 22))
+    fundo = Image.new("RGB", (1080, 1080), FUNDO)
 
     layouts = [
-        layout_direita_destaque,
-        layout_topo_destaque,
-        layout_esquerda_destaque,
-        layout_2x2_com_destaque,
+        layout_01_topo,
+        layout_02_esquerda,
+        layout_03_direita,
+        layout_04_centro,
+        layout_05_mosaico,
+        layout_06_topo_duplo,
     ]
 
     layout = random.choice(layouts)

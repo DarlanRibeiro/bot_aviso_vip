@@ -1,13 +1,13 @@
 import os
-import json
 import io
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
+
 from config import (
-    GOOGLE_SERVICE_ACCOUNT_JSON,
+    GOOGLE_SERVICE_ACCOUNT_FILE,
     GOOGLE_DRIVE_NOVOS_FOLDER_ID,
     GOOGLE_DRIVE_USADOS_FOLDER_ID,
     PASTA_PRINTS,
@@ -17,8 +17,10 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def get_service():
-    info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    creds = service_account.Credentials.from_service_account_file(
+        GOOGLE_SERVICE_ACCOUNT_FILE,
+        scopes=SCOPES,
+    )
     return build("drive", "v3", credentials=creds)
 
 
