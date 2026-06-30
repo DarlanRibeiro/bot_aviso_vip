@@ -1,12 +1,13 @@
 import os
 import io
-
+import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 
 from config import (
+    GOOGLE_SERVICE_ACCOUNT_JSON,
     GOOGLE_SERVICE_ACCOUNT_FILE,
     GOOGLE_DRIVE_NOVOS_FOLDER_ID,
     GOOGLE_DRIVE_USADOS_FOLDER_ID,
