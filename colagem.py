@@ -26,7 +26,7 @@ def abrir_logo(caminho_logo):
 
 def redimensionar_logo(
     logo,
-    escala=5.0,          # <<< aumente aqui (3.0, 4.0, 5.0...)
+    escala=6.0,          # <<< aumente aqui (3.0, 4.0, 5.0...)
     largura_max=1000,
     altura_max=260,
 ):
@@ -266,7 +266,7 @@ def criar_colagem(imagens_top):
 
     fundo = colar_logo_topo(fundo, caminho_logo)
 
-    offset_y = 220
+    offset_y = 280
 
     layouts = [
         layout_01_topo,
