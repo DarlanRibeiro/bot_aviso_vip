@@ -23,7 +23,7 @@ def abrir_logo(caminho_logo):
     return ImageOps.exif_transpose(logo)
 
 
-def redimensionar_logo(logo, largura_max=2000, altura_max=250):
+def redimensionar_logo(logo, largura_max=5000, altura_max=550):
     logo = logo.copy()
     logo.thumbnail((largura_max, altura_max), Image.Resampling.LANCZOS)
     return logo
