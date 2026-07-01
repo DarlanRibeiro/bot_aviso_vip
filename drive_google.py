@@ -11,7 +11,7 @@ from config import (
     GOOGLE_SERVICE_ACCOUNT_FILE,
     GOOGLE_DRIVE_NOVOS_FOLDER_ID,
     GOOGLE_DRIVE_USADOS_FOLDER_ID,
-    PASTA_PRINTS,
+    PASTA_PRINTS,GOOGLE_DRIVE_LOGOS_FOLDER_ID,
 )
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -126,3 +126,48 @@ def reciclar_usados_para_novos():
         ).execute()
 
     return len(usados)
+
+def baixar_logo():
+    service = get_service()
+
+    query = (
+        f"'{GOOGLE_DRIVE_LOGOS_FOLDER_ID}' in parents "
+        f"and trashed = false "
+        f"and mimeType contains 'image/'"
+    )
+
+    resultado = service.files().list(
+        q=query,
+        fields="files(id,name,mimeType,modifiedTime)",
+        orderBy="modifiedTime desc",
+        pageSize=10,
+        supportsAllDrives=True,
+    ).execute()
+
+    arquivos = resultado.get("files", [])
+
+    if not arquivos:
+        print("Nenhuma logo encontrada na pasta 03_LOGOS.")
+        return None
+
+    logo = arquivos[0]
+
+    os.makedirs(PASTA_PRINTS, exist_ok=True)
+
+    caminho = os.path.join(PASTA_PRINTS, "logo.png")
+
+    request = service.files().get_media(
+        fileId=logo["id"],
+        supportsAllDrives=True,
+    )
+
+    with io.FileIO(caminho, "wb") as arquivo:
+        downloader = MediaIoBaseDownload(arquivo, request)
+        concluido = False
+
+        while not concluido:
+            _, concluido = downloader.next_chunk()
+
+    print(f"Logo baixada: {logo['name']}")
+
+    return caminho
