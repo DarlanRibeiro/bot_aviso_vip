@@ -23,11 +23,7 @@ def abrir_logo(caminho_logo):
     return ImageOps.exif_transpose(logo)
 
 
-def redimensionar_logo_marca_dagua(logo, largura_alvo=780):
-    """
-    Aumenta a logo para virar marca d'água grande.
-    Mantém proporção.
-    """
+def redimensionar_logo_marca_dagua(logo, largura_alvo=760):
     proporcao = largura_alvo / logo.width
     nova_altura = int(logo.height * proporcao)
 
@@ -37,17 +33,10 @@ def redimensionar_logo_marca_dagua(logo, largura_alvo=780):
     )
 
 
-def aplicar_transparencia(logo, opacidade=0.23):
-    """
-    Aplica transparência na logo.
-    0.15 = bem suave
-    0.25 = mais visível
-    """
+def aplicar_transparencia(logo, opacidade=0.22):
     logo = logo.copy()
-
     alpha = logo.getchannel("A")
     alpha = alpha.point(lambda p: int(p * opacidade))
-
     logo.putalpha(alpha)
     return logo
 
@@ -59,15 +48,8 @@ def aplicar_marca_dagua(fundo, caminho_logo):
         print("Marca d'água não aplicada: logo não encontrada.")
         return fundo
 
-    logo = redimensionar_logo_marca_dagua(
-        logo,
-        largura_alvo=820,
-    )
-
-    logo = aplicar_transparencia(
-        logo,
-        opacidade=0.24,
-    )
+    logo = redimensionar_logo_marca_dagua(logo, largura_alvo=760)
+    logo = aplicar_transparencia(logo, opacidade=0.22)
 
     largura_fundo, altura_fundo = fundo.size
 
@@ -108,115 +90,242 @@ def colar_card(fundo, item, x, y, w, h, destaque=False):
     fundo.paste(card, (x, y), mask)
 
 
-def layout_01_topo(fundo, imagens):
+def pegar(imagens, indice):
+    if not imagens:
+        return None
+
+    return imagens[indice % len(imagens)]
+
+
+def layout_01_grade_2x3(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    grande_w = largura - margem * 2
-    grande_h = 620
+    card_w = (largura - margem * 2 - espaco) // 2
+    card_h = (altura - margem * 2 - espaco * 2) // 3
 
-    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
+    posicoes = [
+        (margem, margem),
+        (margem + card_w + espaco, margem),
+        (margem, margem + card_h + espaco),
+        (margem + card_w + espaco, margem + card_h + espaco),
+        (margem, margem + (card_h + espaco) * 2),
+        (margem + card_w + espaco, margem + (card_h + espaco) * 2),
+    ]
 
-    pequeno_w = (largura - margem * 2 - espaco * 2) // 3
-    pequeno_h = altura - margem * 2 - grande_h - espaco
-    y = margem + grande_h + espaco
-
-    for i, item in enumerate(imagens[1:4]):
-        x = margem + i * (pequeno_w + espaco)
-        colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
+    for i, pos in enumerate(posicoes):
+        item = pegar(imagens, i)
+        colar_card(fundo, item, pos[0], pos[1], card_w, card_h, destaque=(i == 0))
 
     return fundo
 
 
-def layout_02_esquerda(fundo, imagens):
+def layout_02_destaque_direita_com_coluna(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    grande_w = 650
-    grande_h = altura - margem * 2
+    coluna_w = 360
+    destaque_w = largura - margem * 2 - coluna_w - espaco
 
-    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
+    card_col_h = (altura - margem * 2 - espaco * 2) // 3
 
-    pequeno_w = largura - margem * 2 - grande_w - espaco
-    pequeno_h = (altura - margem * 2 - espaco * 2) // 3
+    for i in range(3):
+        item = pegar(imagens, i + 1)
+        y = margem + i * (card_col_h + espaco)
+        colar_card(fundo, item, margem, y, coluna_w, card_col_h)
 
-    x = margem + grande_w + espaco
-
-    for i, item in enumerate(imagens[1:4]):
-        y = margem + i * (pequeno_h + espaco)
-        colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
+    x_destaque = margem + coluna_w + espaco
+    colar_card(
+        fundo,
+        pegar(imagens, 0),
+        x_destaque,
+        margem,
+        destaque_w,
+        altura - margem * 2,
+        destaque=True,
+    )
 
     return fundo
 
 
-def layout_03_direita(fundo, imagens):
+def layout_03_destaque_esquerda_com_coluna(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    pequeno_w = 390
-    grande_w = largura - margem * 2 - pequeno_w - espaco
-    grande_h = altura - margem * 2
+    coluna_w = 360
+    destaque_w = largura - margem * 2 - coluna_w - espaco
 
-    x_grande = margem + pequeno_w + espaco
-    colar_card(fundo, imagens[0], x_grande, margem, grande_w, grande_h, True)
+    colar_card(
+        fundo,
+        pegar(imagens, 0),
+        margem,
+        margem,
+        destaque_w,
+        altura - margem * 2,
+        destaque=True,
+    )
 
-    pequeno_h = (altura - margem * 2 - espaco * 2) // 3
+    x_coluna = margem + destaque_w + espaco
+    card_col_h = (altura - margem * 2 - espaco * 2) // 3
 
-    for i, item in enumerate(imagens[1:4]):
-        x = margem
-        y = margem + i * (pequeno_h + espaco)
-        colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
+    for i in range(3):
+        item = pegar(imagens, i + 1)
+        y = margem + i * (card_col_h + espaco)
+        colar_card(fundo, item, x_coluna, y, coluna_w, card_col_h)
 
     return fundo
 
 
-def layout_04_mosaico(fundo, imagens):
+def layout_04_destaque_topo_mais_4(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    grande_h = 570
-    pequeno_h = altura - margem * 2 - grande_h - espaco
+    destaque_h = 520
+    baixo_h = altura - margem * 2 - destaque_h - espaco
 
-    esquerda_w = 680
+    colar_card(
+        fundo,
+        pegar(imagens, 0),
+        margem,
+        margem,
+        largura - margem * 2,
+        destaque_h,
+        destaque=True,
+    )
+
+    card_w = (largura - margem * 2 - espaco * 3) // 4
+    y = margem + destaque_h + espaco
+
+    for i in range(4):
+        x = margem + i * (card_w + espaco)
+        colar_card(fundo, pegar(imagens, i + 1), x, y, card_w, baixo_h)
+
+    return fundo
+
+
+def layout_05_mosaico_cheio(fundo, imagens):
+    margem = 10
+    espaco = 8
+    largura, altura = fundo.size
+
+    esquerda_w = 620
     direita_w = largura - margem * 2 - esquerda_w - espaco
 
-    colar_card(fundo, imagens[0], margem, margem, esquerda_w, grande_h, True)
+    topo_h = 560
+    baixo_h = altura - margem * 2 - topo_h - espaco
+
+    colar_card(
+        fundo,
+        pegar(imagens, 0),
+        margem,
+        margem,
+        esquerda_w,
+        topo_h,
+        destaque=True,
+    )
 
     x_dir = margem + esquerda_w + espaco
-    meio_h = (grande_h - espaco) // 2
+    dir_card_h = (topo_h - espaco) // 2
 
-    colar_card(fundo, imagens[1], x_dir, margem, direita_w, meio_h)
-    colar_card(fundo, imagens[2], x_dir, margem + meio_h + espaco, direita_w, meio_h)
+    colar_card(fundo, pegar(imagens, 1), x_dir, margem, direita_w, dir_card_h)
+    colar_card(
+        fundo,
+        pegar(imagens, 2),
+        x_dir,
+        margem + dir_card_h + espaco,
+        direita_w,
+        dir_card_h,
+    )
 
-    y_baixo = margem + grande_h + espaco
-    colar_card(fundo, imagens[3], margem, y_baixo, largura - margem * 2, pequeno_h)
+    card_baixo_w = (largura - margem * 2 - espaco * 2) // 3
+    y_baixo = margem + topo_h + espaco
+
+    for i in range(3):
+        x = margem + i * (card_baixo_w + espaco)
+        colar_card(fundo, pegar(imagens, i + 3), x, y_baixo, card_baixo_w, baixo_h)
 
     return fundo
 
 
-def layout_05_duplo(fundo, imagens):
+def layout_06_destaque_centro_com_laterais(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    grande_h = 600
-    baixo_h = altura - margem * 2 - grande_h - espaco
+    lateral_w = 250
+    centro_w = largura - margem * 2 - lateral_w * 2 - espaco * 2
 
-    grande_w = int((largura - margem * 2 - espaco) * 0.68)
-    lateral_w = largura - margem * 2 - grande_w - espaco
+    card_lat_h = (altura - margem * 2 - espaco * 2) // 3
 
-    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
-    colar_card(fundo, imagens[1], margem + grande_w + espaco, margem, lateral_w, grande_h)
+    for i in range(3):
+        y = margem + i * (card_lat_h + espaco)
+        colar_card(fundo, pegar(imagens, i + 1), margem, y, lateral_w, card_lat_h)
 
-    pequeno_w = (largura - margem * 2 - espaco) // 2
-    y = margem + grande_h + espaco
+    x_centro = margem + lateral_w + espaco
 
-    colar_card(fundo, imagens[2], margem, y, pequeno_w, baixo_h)
-    colar_card(fundo, imagens[3], margem + pequeno_w + espaco, y, pequeno_w, baixo_h)
+    colar_card(
+        fundo,
+        pegar(imagens, 0),
+        x_centro,
+        margem,
+        centro_w,
+        altura - margem * 2,
+        destaque=True,
+    )
+
+    x_dir = x_centro + centro_w + espaco
+
+    for i in range(3):
+        y = margem + i * (card_lat_h + espaco)
+        colar_card(fundo, pegar(imagens, i + 4), x_dir, y, lateral_w, card_lat_h)
+
+    return fundo
+
+
+def layout_07_quadros_compactos(fundo, imagens):
+    margem = 10
+    espaco = 8
+    largura, altura = fundo.size
+
+    topo_h = 510
+    baixo_h = altura - margem * 2 - topo_h - espaco
+
+    destaque_w = 650
+    lateral_w = largura - margem * 2 - destaque_w - espaco
+
+    colar_card(
+        fundo,
+        pegar(imagens, 0),
+        margem,
+        margem,
+        destaque_w,
+        topo_h,
+        destaque=True,
+    )
+
+    x_lateral = margem + destaque_w + espaco
+    lateral_h = (topo_h - espaco) // 2
+
+    colar_card(fundo, pegar(imagens, 1), x_lateral, margem, lateral_w, lateral_h)
+    colar_card(
+        fundo,
+        pegar(imagens, 2),
+        x_lateral,
+        margem + lateral_h + espaco,
+        lateral_w,
+        lateral_h,
+    )
+
+    baixo_w = (largura - margem * 2 - espaco * 2) // 3
+    y = margem + topo_h + espaco
+
+    for i in range(3):
+        x = margem + i * (baixo_w + espaco)
+        colar_card(fundo, pegar(imagens, i + 3), x, y, baixo_w, baixo_h)
 
     return fundo
 
@@ -238,18 +347,29 @@ def criar_colagem(imagens_top):
 
     fundo = Image.new("RGB", (1080, 1080), FUNDO)
 
-    layouts = [
-        layout_01_topo,
-        layout_02_esquerda,
-        layout_03_direita,
-        layout_04_mosaico,
-        layout_05_duplo,
-    ]
+    if len(imagens) >= 6:
+        layouts = [
+            layout_01_grade_2x3,
+            layout_05_mosaico_cheio,
+            layout_06_destaque_centro_com_laterais,
+            layout_07_quadros_compactos,
+        ]
+    elif len(imagens) >= 5:
+        layouts = [
+            layout_04_destaque_topo_mais_4,
+            layout_05_mosaico_cheio,
+            layout_07_quadros_compactos,
+        ]
+    else:
+        layouts = [
+            layout_02_destaque_direita_com_coluna,
+            layout_03_destaque_esquerda_com_coluna,
+            layout_04_destaque_topo_mais_4,
+        ]
 
     layout = random.choice(layouts)
     fundo = layout(fundo, imagens)
 
-    # Logo por cima da colagem, centralizada, com transparência
     caminho_logo = baixar_logo()
     fundo = aplicar_marca_dagua(fundo, caminho_logo)
 
