@@ -42,6 +42,10 @@ def ajustar_crop_para_proporcao(x1, y1, x2, y2, img_w, img_h, box_w, box_h):
 
     crop_w = x2 - x1
     crop_h = y2 - y1
+
+    if crop_h <= 0 or crop_w <= 0:
+        return 0, 0, img_w, img_h
+
     crop_ratio = crop_w / crop_h
 
     if crop_ratio < target_ratio:
@@ -83,29 +87,33 @@ def ajustar_crop_para_proporcao(x1, y1, x2, y2, img_w, img_h, box_w, box_h):
 
 def calcular_crop_usuario_roi(img_w, img_h, box_w, box_h, bbox_foco=None):
     """
-    Recorte principal:
-    - começa um pouco acima do usuário;
-    - termina logo abaixo do ROI;
-    - evita QR Code e rodapé;
-    - mantém proporção do card para não distorcer.
+    Nova regra:
+    - começa sempre no topo para preservar usuário/avatar/data;
+    - termina abaixo do ROI/bloco útil;
+    - evita pegar rodapé/QR Code demais;
+    - mantém proporção para não distorcer.
     """
 
     fx1, fy1, fx2, fy2 = bbox_foco
 
-    margem_topo = img_h * 0.06
-    margem_baixo = img_h * 0.07
+    # Sempre começa no topo para mostrar usuário/avatar/data
+    y1 = 0
 
-    y1 = max(0, fy1 - margem_topo)
+    # Termina logo abaixo da região útil encontrada pelo OCR
+    margem_baixo = img_h * 0.08
     y2 = min(img_h, fy2 + margem_baixo)
 
-    altura_minima = img_h * 0.34
+    # Garante altura suficiente para usuário + moeda + ROI
+    altura_minima = img_h * 0.44
     if (y2 - y1) < altura_minima:
         y2 = min(img_h, y1 + altura_minima)
 
-    altura_maxima = img_h * 0.72
+    # Evita capturar rodapé/QR Code/código de recomendação em excesso
+    altura_maxima = img_h * 0.74
     if (y2 - y1) > altura_maxima:
         y2 = y1 + altura_maxima
 
+    # Centraliza horizontalmente no bloco útil
     cx = (fx1 + fx2) / 2
 
     crop_h = y2 - y1
@@ -157,5 +165,5 @@ def camera_virtual(img, tamanho, bbox_foco=None, bbox_moeda=None, destaque=False
 
     recorte = img.crop((x1, y1, x2, y2))
 
-    # nunca estica: apenas encaixa mantendo proporção
+    # Nunca estica: apenas encaixa mantendo proporção
     return encaixar_sem_distorcer(recorte, tamanho)
