@@ -23,75 +23,61 @@ def abrir_logo(caminho_logo):
     return ImageOps.exif_transpose(logo)
 
 
-
-def redimensionar_logo(
-    logo,
-    escala=6.0,          # <<< aumente aqui (3.0, 4.0, 5.0...)
-    largura_max=1000,
-    altura_max=260,
-):
+def redimensionar_logo_marca_dagua(logo, largura_alvo=780):
     """
-    Aumenta realmente a logo.
-
-    Diferente do thumbnail(), este método amplia a imagem.
+    Aumenta a logo para virar marca d'água grande.
+    Mantém proporção.
     """
+    proporcao = largura_alvo / logo.width
+    nova_altura = int(logo.height * proporcao)
 
-    largura = int(logo.width * escala)
-    altura = int(logo.height * escala)
-
-    logo = logo.resize(
-        (largura, altura),
+    return logo.resize(
+        (largura_alvo, nova_altura),
         Image.Resampling.LANCZOS,
     )
 
-    # evita ultrapassar a largura disponível
-    if logo.width > largura_max:
 
-        fator = largura_max / logo.width
+def aplicar_transparencia(logo, opacidade=0.23):
+    """
+    Aplica transparência na logo.
+    0.15 = bem suave
+    0.25 = mais visível
+    """
+    logo = logo.copy()
 
-        logo = logo.resize(
-            (
-                int(logo.width * fator),
-                int(logo.height * fator),
-            ),
-            Image.Resampling.LANCZOS,
-        )
+    alpha = logo.getchannel("A")
+    alpha = alpha.point(lambda p: int(p * opacidade))
 
-    # evita ultrapassar a altura disponível
-    if logo.height > altura_max:
-
-        fator = altura_max / logo.height
-
-        logo = logo.resize(
-            (
-                int(logo.width * fator),
-                int(logo.height * fator),
-            ),
-            Image.Resampling.LANCZOS,
-        )
-
+    logo.putalpha(alpha)
     return logo
 
 
-def colar_logo_topo(fundo, caminho_logo):
+def aplicar_marca_dagua(fundo, caminho_logo):
     logo = abrir_logo(caminho_logo)
 
     if logo is None:
+        print("Marca d'água não aplicada: logo não encontrada.")
         return fundo
 
-    logo = redimensionar_logo(
+    logo = redimensionar_logo_marca_dagua(
         logo,
-        escala=4.5,
+        largura_alvo=820,
     )
 
-    largura_fundo, _ = fundo.size
+    logo = aplicar_transparencia(
+        logo,
+        opacidade=0.24,
+    )
+
+    largura_fundo, altura_fundo = fundo.size
 
     x = (largura_fundo - logo.width) // 2
-    y = 15
+    y = (altura_fundo - logo.height) // 2
 
-    fundo.paste(logo, (x, y), logo)
+    fundo_rgba = fundo.convert("RGBA")
+    fundo_rgba.paste(logo, (x, y), logo)
 
-    return fundo
+    return fundo_rgba.convert("RGB")
 
 
 def arredondar(img, raio=22):
@@ -122,22 +108,19 @@ def colar_card(fundo, item, x, y, w, h, destaque=False):
     fundo.paste(card, (x, y), mask)
 
 
-def layout_01_topo(fundo, imagens, offset_y):
+def layout_01_topo(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    area_h = altura - offset_y - margem
     grande_w = largura - margem * 2
-    grande_h = int(area_h * 0.58)
+    grande_h = 620
 
-    y_grande = offset_y
-
-    colar_card(fundo, imagens[0], margem, y_grande, grande_w, grande_h, True)
+    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
 
     pequeno_w = (largura - margem * 2 - espaco * 2) // 3
-    pequeno_h = area_h - grande_h - espaco
-    y = y_grande + grande_h + espaco
+    pequeno_h = altura - margem * 2 - grande_h - espaco
+    y = margem + grande_h + espaco
 
     for i, item in enumerate(imagens[1:4]):
         x = margem + i * (pequeno_w + espaco)
@@ -146,98 +129,91 @@ def layout_01_topo(fundo, imagens, offset_y):
     return fundo
 
 
-def layout_02_esquerda(fundo, imagens, offset_y):
+def layout_02_esquerda(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    area_h = altura - offset_y - margem
     grande_w = 650
-    grande_h = area_h
+    grande_h = altura - margem * 2
 
-    colar_card(fundo, imagens[0], margem, offset_y, grande_w, grande_h, True)
+    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
 
     pequeno_w = largura - margem * 2 - grande_w - espaco
-    pequeno_h = (area_h - espaco * 2) // 3
+    pequeno_h = (altura - margem * 2 - espaco * 2) // 3
 
     x = margem + grande_w + espaco
 
     for i, item in enumerate(imagens[1:4]):
-        y = offset_y + i * (pequeno_h + espaco)
+        y = margem + i * (pequeno_h + espaco)
         colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
 
     return fundo
 
 
-def layout_03_direita(fundo, imagens, offset_y):
+def layout_03_direita(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
-
-    area_h = altura - offset_y - margem
 
     pequeno_w = 390
     grande_w = largura - margem * 2 - pequeno_w - espaco
-    grande_h = area_h
+    grande_h = altura - margem * 2
 
     x_grande = margem + pequeno_w + espaco
-    colar_card(fundo, imagens[0], x_grande, offset_y, grande_w, grande_h, True)
+    colar_card(fundo, imagens[0], x_grande, margem, grande_w, grande_h, True)
 
-    pequeno_h = (area_h - espaco * 2) // 3
+    pequeno_h = (altura - margem * 2 - espaco * 2) // 3
 
     for i, item in enumerate(imagens[1:4]):
         x = margem
-        y = offset_y + i * (pequeno_h + espaco)
+        y = margem + i * (pequeno_h + espaco)
         colar_card(fundo, item, x, y, pequeno_w, pequeno_h)
 
     return fundo
 
 
-def layout_04_mosaico(fundo, imagens, offset_y):
+def layout_04_mosaico(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    area_h = altura - offset_y - margem
-
-    grande_h = int(area_h * 0.55)
-    pequeno_h = area_h - grande_h - espaco
+    grande_h = 570
+    pequeno_h = altura - margem * 2 - grande_h - espaco
 
     esquerda_w = 680
     direita_w = largura - margem * 2 - esquerda_w - espaco
 
-    colar_card(fundo, imagens[0], margem, offset_y, esquerda_w, grande_h, True)
+    colar_card(fundo, imagens[0], margem, margem, esquerda_w, grande_h, True)
 
     x_dir = margem + esquerda_w + espaco
     meio_h = (grande_h - espaco) // 2
 
-    colar_card(fundo, imagens[1], x_dir, offset_y, direita_w, meio_h)
-    colar_card(fundo, imagens[2], x_dir, offset_y + meio_h + espaco, direita_w, meio_h)
+    colar_card(fundo, imagens[1], x_dir, margem, direita_w, meio_h)
+    colar_card(fundo, imagens[2], x_dir, margem + meio_h + espaco, direita_w, meio_h)
 
-    y_baixo = offset_y + grande_h + espaco
+    y_baixo = margem + grande_h + espaco
     colar_card(fundo, imagens[3], margem, y_baixo, largura - margem * 2, pequeno_h)
 
     return fundo
 
 
-def layout_05_duplo(fundo, imagens, offset_y):
+def layout_05_duplo(fundo, imagens):
     margem = 10
     espaco = 8
     largura, altura = fundo.size
 
-    area_h = altura - offset_y - margem
-
-    grande_h = int(area_h * 0.56)
-    baixo_h = area_h - grande_h - espaco
+    grande_h = 600
+    baixo_h = altura - margem * 2 - grande_h - espaco
 
     grande_w = int((largura - margem * 2 - espaco) * 0.68)
     lateral_w = largura - margem * 2 - grande_w - espaco
 
-    colar_card(fundo, imagens[0], margem, offset_y, grande_w, grande_h, True)
-    colar_card(fundo, imagens[1], margem + grande_w + espaco, offset_y, lateral_w, grande_h)
+    colar_card(fundo, imagens[0], margem, margem, grande_w, grande_h, True)
+    colar_card(fundo, imagens[1], margem + grande_w + espaco, margem, lateral_w, grande_h)
 
     pequeno_w = (largura - margem * 2 - espaco) // 2
-    y = offset_y + grande_h + espaco
+    y = margem + grande_h + espaco
 
     colar_card(fundo, imagens[2], margem, y, pequeno_w, baixo_h)
     colar_card(fundo, imagens[3], margem + pequeno_w + espaco, y, pequeno_w, baixo_h)
@@ -262,12 +238,6 @@ def criar_colagem(imagens_top):
 
     fundo = Image.new("RGB", (1080, 1080), FUNDO)
 
-    caminho_logo = baixar_logo()
-
-    fundo = colar_logo_topo(fundo, caminho_logo)
-
-    offset_y = 280
-
     layouts = [
         layout_01_topo,
         layout_02_esquerda,
@@ -277,7 +247,11 @@ def criar_colagem(imagens_top):
     ]
 
     layout = random.choice(layouts)
-    fundo = layout(fundo, imagens, offset_y)
+    fundo = layout(fundo, imagens)
+
+    # Logo por cima da colagem, centralizada, com transparência
+    caminho_logo = baixar_logo()
+    fundo = aplicar_marca_dagua(fundo, caminho_logo)
 
     nome_saida = f"colagem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
     caminho_saida = os.path.join(PASTA_COLAGENS, nome_saida)
