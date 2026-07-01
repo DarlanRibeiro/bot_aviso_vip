@@ -23,9 +23,53 @@ def abrir_logo(caminho_logo):
     return ImageOps.exif_transpose(logo)
 
 
-def redimensionar_logo(logo, largura_max=2000, altura_max=250):
-    logo = logo.copy()
-    logo.thumbnail((largura_max, altura_max), Image.Resampling.LANCZOS)
+
+def redimensionar_logo(
+    logo,
+    escala=4.0,          # <<< aumente aqui (3.0, 4.0, 5.0...)
+    largura_max=1000,
+    altura_max=260,
+):
+    """
+    Aumenta realmente a logo.
+
+    Diferente do thumbnail(), este método amplia a imagem.
+    """
+
+    largura = int(logo.width * escala)
+    altura = int(logo.height * escala)
+
+    logo = logo.resize(
+        (largura, altura),
+        Image.Resampling.LANCZOS,
+    )
+
+    # evita ultrapassar a largura disponível
+    if logo.width > largura_max:
+
+        fator = largura_max / logo.width
+
+        logo = logo.resize(
+            (
+                int(logo.width * fator),
+                int(logo.height * fator),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
+    # evita ultrapassar a altura disponível
+    if logo.height > altura_max:
+
+        fator = altura_max / logo.height
+
+        logo = logo.resize(
+            (
+                int(logo.width * fator),
+                int(logo.height * fator),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+
     return logo
 
 
@@ -35,7 +79,10 @@ def colar_logo_topo(fundo, caminho_logo):
     if logo is None:
         return fundo
 
-    logo = redimensionar_logo(logo)
+    logo = redimensionar_logo(
+        logo,
+        escala=4.5,
+    )
 
     largura_fundo, _ = fundo.size
 
