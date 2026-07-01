@@ -23,7 +23,7 @@ def abrir_logo(caminho_logo):
     return ImageOps.exif_transpose(logo)
 
 
-def redimensionar_logo_marca_dagua(logo, largura_alvo=760):
+def redimensionar_logo_marca_dagua(logo, largura_alvo=960):
     proporcao = largura_alvo / logo.width
     nova_altura = int(logo.height * proporcao)
 
@@ -33,7 +33,7 @@ def redimensionar_logo_marca_dagua(logo, largura_alvo=760):
     )
 
 
-def aplicar_transparencia(logo, opacidade=0.22):
+def aplicar_transparencia(logo, opacidade=0.50):
     logo = logo.copy()
     alpha = logo.getchannel("A")
     alpha = alpha.point(lambda p: int(p * opacidade))
@@ -48,8 +48,8 @@ def aplicar_marca_dagua(fundo, caminho_logo):
         print("Marca d'água não aplicada: logo não encontrada.")
         return fundo
 
-    logo = redimensionar_logo_marca_dagua(logo, largura_alvo=760)
-    logo = aplicar_transparencia(logo, opacidade=0.22)
+    logo = redimensionar_logo_marca_dagua(logo, largura_alvo=960)
+    logo = aplicar_transparencia(logo, opacidade=0.50)
 
     largura_fundo, altura_fundo = fundo.size
 
