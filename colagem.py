@@ -23,7 +23,7 @@ def abrir_logo(caminho_logo):
     return ImageOps.exif_transpose(logo)
 
 
-def redimensionar_logo(logo, largura_max=5000, altura_max=550):
+def redimensionar_logo(logo, largura_max=9000, altura_max=250):
     logo = logo.copy()
     logo.thumbnail((largura_max, altura_max), Image.Resampling.LANCZOS)
     return logo
@@ -219,7 +219,7 @@ def criar_colagem(imagens_top):
 
     fundo = colar_logo_topo(fundo, caminho_logo)
 
-    offset_y = 280
+    offset_y = 480
 
     layouts = [
         layout_01_topo,
