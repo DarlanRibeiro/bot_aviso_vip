@@ -3,10 +3,6 @@ from PIL import Image
 FUNDO = (5, 9, 22)
 
 
-def limitar(valor, minimo, maximo):
-    return max(minimo, min(valor, maximo))
-
-
 def modo_seguro(img, tamanho):
     box_w, box_h = tamanho
 
@@ -22,116 +18,44 @@ def modo_seguro(img, tamanho):
     return canvas
 
 
-def imagem_fora_do_padrao(img_w, img_h, bbox_foco=None):
-    proporcao = img_w / img_h
-
-    if img_w < 400 or img_h < 400:
-        return True
-
-    if bbox_foco is None:
-        return True
-
-    if proporcao > 1.10:
-        return True
-
-    return False
-
-
-def ajustar_crop_para_proporcao(x1, y1, x2, y2, img_w, img_h, box_w, box_h):
-    target_ratio = box_w / box_h
-
-    crop_w = x2 - x1
-    crop_h = y2 - y1
-
-    if crop_h <= 0 or crop_w <= 0:
-        return 0, 0, img_w, img_h
-
-    crop_ratio = crop_w / crop_h
-
-    if crop_ratio < target_ratio:
-        novo_w = crop_h * target_ratio
-        cx = (x1 + x2) / 2
-        x1 = cx - novo_w / 2
-        x2 = cx + novo_w / 2
-    else:
-        novo_h = crop_w / target_ratio
-        cy = (y1 + y2) / 2
-        y1 = cy - novo_h / 2
-        y2 = cy + novo_h / 2
-
-    if x1 < 0:
-        x2 -= x1
-        x1 = 0
-
-    if y1 < 0:
-        y2 -= y1
-        y1 = 0
-
-    if x2 > img_w:
-        excesso = x2 - img_w
-        x1 -= excesso
-        x2 = img_w
-
-    if y2 > img_h:
-        excesso = y2 - img_h
-        y1 -= excesso
-        y2 = img_h
-
-    x1 = limitar(x1, 0, img_w - 1)
-    y1 = limitar(y1, 0, img_h - 1)
-    x2 = limitar(x2, x1 + 1, img_w)
-    y2 = limitar(y2, y1 + 1, img_h)
-
-    return int(x1), int(y1), int(x2), int(y2)
-
-
-def calcular_crop_usuario_roi(img_w, img_h, box_w, box_h, bbox_foco=None):
+def calcular_crop_seguro(img_w, img_h, bbox_foco=None, destaque=False):
     """
-    Nova regra:
-    - começa sempre no topo para preservar usuário/avatar/data;
-    - termina abaixo do ROI/bloco útil;
-    - evita pegar rodapé/QR Code demais;
-    - mantém proporção para não distorcer.
+    Regra principal:
+    nunca cortar usuário, moeda e ROI.
+
+    Estratégia:
+    - começa sempre no topo da imagem;
+    - mantém a largura inteira da imagem;
+    - corta apenas a parte inferior desnecessária;
+    - evita QR Code/rodapé quando possível.
     """
 
-    fx1, fy1, fx2, fy2 = bbox_foco
-
-    # Sempre começa no topo para mostrar usuário/avatar/data
+    x1 = 0
+    x2 = img_w
     y1 = 0
 
-    # Termina logo abaixo da região útil encontrada pelo OCR
-    margem_baixo = img_h * 0.08
-    y2 = min(img_h, fy2 + margem_baixo)
+    if bbox_foco:
+        _, _, _, fy2 = bbox_foco
 
-    # Garante altura suficiente para usuário + moeda + ROI
-    altura_minima = img_h * 0.44
-    if (y2 - y1) < altura_minima:
-        y2 = min(img_h, y1 + altura_minima)
+        margem_baixo = img_h * (0.10 if destaque else 0.08)
 
-    # Evita capturar rodapé/QR Code/código de recomendação em excesso
-    altura_maxima = img_h * 0.74
-    if (y2 - y1) > altura_maxima:
-        y2 = y1 + altura_maxima
+        y2 = fy2 + margem_baixo
+    else:
+        y2 = img_h * 0.70
 
-    # Centraliza horizontalmente no bloco útil
-    cx = (fx1 + fx2) / 2
+    altura_minima = img_h * (0.58 if destaque else 0.52)
 
-    crop_h = y2 - y1
-    crop_w = crop_h * (box_w / box_h)
+    if y2 < altura_minima:
+        y2 = altura_minima
 
-    x1 = cx - crop_w / 2
-    x2 = cx + crop_w / 2
+    altura_maxima = img_h * (0.82 if destaque else 0.76)
 
-    return ajustar_crop_para_proporcao(
-        x1,
-        y1,
-        x2,
-        y2,
-        img_w,
-        img_h,
-        box_w,
-        box_h,
-    )
+    if y2 > altura_maxima:
+        y2 = altura_maxima
+
+    y2 = min(img_h, max(y2, 1))
+
+    return int(x1), int(y1), int(x2), int(y2)
 
 
 def encaixar_sem_distorcer(recorte, tamanho):
@@ -149,21 +73,15 @@ def encaixar_sem_distorcer(recorte, tamanho):
 
 
 def camera_virtual(img, tamanho, bbox_foco=None, bbox_moeda=None, destaque=False):
-    box_w, box_h = tamanho
     img_w, img_h = img.size
 
-    if imagem_fora_do_padrao(img_w, img_h, bbox_foco=bbox_foco):
-        return modo_seguro(img, tamanho)
-
-    x1, y1, x2, y2 = calcular_crop_usuario_roi(
+    x1, y1, x2, y2 = calcular_crop_seguro(
         img_w=img_w,
         img_h=img_h,
-        box_w=box_w,
-        box_h=box_h,
         bbox_foco=bbox_foco,
+        destaque=destaque,
     )
 
     recorte = img.crop((x1, y1, x2, y2))
 
-    # Nunca estica: apenas encaixa mantendo proporção
     return encaixar_sem_distorcer(recorte, tamanho)
