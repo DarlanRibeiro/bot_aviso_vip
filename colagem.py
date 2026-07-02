@@ -6,6 +6,7 @@ from PIL import Image, ImageOps, ImageDraw
 from config import PASTA_COLAGENS
 from camera import camera_virtual
 from drive_google import baixar_logo
+from layout_engine import escolher_layout_4
 
 FUNDO = (5, 9, 22)
 
@@ -93,225 +94,21 @@ def pegar(imagens, indice):
     return imagens[indice % len(imagens)]
 
 
-def layout_4_hero_direita(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
+def desenhar_layout(fundo, imagens, layout):
+    for card in layout["cards"]:
+        item = pegar(imagens, card["i"])
 
-    col_w = 350
-    hero_w = W - m * 2 - col_w - e
-    card_h = (H - m * 2 - e * 2) // 3
-
-    for i in range(3):
-        colar_card(fundo, pegar(imagens, i + 1), m, m + i * (card_h + e), col_w, card_h)
-
-    colar_card(fundo, pegar(imagens, 0), m + col_w + e, m, hero_w, H - m * 2, True)
-
-    return fundo
-
-
-def layout_4_hero_esquerda(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    col_w = 350
-    hero_w = W - m * 2 - col_w - e
-    card_h = (H - m * 2 - e * 2) // 3
-
-    colar_card(fundo, pegar(imagens, 0), m, m, hero_w, H - m * 2, True)
-
-    x = m + hero_w + e
-
-    for i in range(3):
-        colar_card(fundo, pegar(imagens, i + 1), x, m + i * (card_h + e), col_w, card_h)
+        colar_card(
+            fundo=fundo,
+            item=item,
+            x=card["x"],
+            y=card["y"],
+            w=card["w"],
+            h=card["h"],
+            destaque=card.get("destaque", False),
+        )
 
     return fundo
-
-
-def layout_4_grade_2x2(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    card_w = (W - m * 2 - e) // 2
-    card_h = (H - m * 2 - e) // 2
-
-    pos = [
-        (m, m),
-        (m + card_w + e, m),
-        (m, m + card_h + e),
-        (m + card_w + e, m + card_h + e),
-    ]
-
-    for i, (x, y) in enumerate(pos):
-        colar_card(fundo, pegar(imagens, i), x, y, card_w, card_h, i == 0)
-
-    return fundo
-
-
-def layout_4_topo(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    hero_h = 560
-    baixo_h = H - m * 2 - hero_h - e
-    baixo_w = (W - m * 2 - e * 2) // 3
-
-    colar_card(fundo, pegar(imagens, 0), m, m, W - m * 2, hero_h, True)
-
-    y = m + hero_h + e
-
-    for i in range(3):
-        x = m + i * (baixo_w + e)
-        colar_card(fundo, pegar(imagens, i + 1), x, y, baixo_w, baixo_h)
-
-    return fundo
-
-
-def layout_5_hero_topo_4baixo(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    hero_h = 500
-    baixo_h = H - m * 2 - hero_h - e
-    baixo_w = (W - m * 2 - e * 3) // 4
-
-    colar_card(fundo, pegar(imagens, 0), m, m, W - m * 2, hero_h, True)
-
-    y = m + hero_h + e
-
-    for i in range(4):
-        x = m + i * (baixo_w + e)
-        colar_card(fundo, pegar(imagens, i + 1), x, y, baixo_w, baixo_h)
-
-    return fundo
-
-
-def layout_5_mosaico(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    hero_w = 640
-    side_w = W - m * 2 - hero_w - e
-    topo_h = 610
-    baixo_h = H - m * 2 - topo_h - e
-
-    colar_card(fundo, pegar(imagens, 0), m, m, hero_w, topo_h, True)
-
-    x_side = m + hero_w + e
-    side_h = (topo_h - e) // 2
-
-    colar_card(fundo, pegar(imagens, 1), x_side, m, side_w, side_h)
-    colar_card(fundo, pegar(imagens, 2), x_side, m + side_h + e, side_w, side_h)
-
-    baixo_w = (W - m * 2 - e) // 2
-    y = m + topo_h + e
-
-    colar_card(fundo, pegar(imagens, 3), m, y, baixo_w, baixo_h)
-    colar_card(fundo, pegar(imagens, 4), m + baixo_w + e, y, baixo_w, baixo_h)
-
-    return fundo
-
-
-def layout_5_hero_direita(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    left_w = 420
-    hero_w = W - m * 2 - left_w - e
-
-    small_h = (H - m * 2 - e * 3) // 4
-
-    for i in range(4):
-        colar_card(fundo, pegar(imagens, i + 1), m, m + i * (small_h + e), left_w, small_h)
-
-    colar_card(fundo, pegar(imagens, 0), m + left_w + e, m, hero_w, H - m * 2, True)
-
-    return fundo
-
-
-def layout_6_grade_2x3(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    card_w = (W - m * 2 - e) // 2
-    card_h = (H - m * 2 - e * 2) // 3
-
-    for i in range(6):
-        col = i % 2
-        row = i // 2
-        x = m + col * (card_w + e)
-        y = m + row * (card_h + e)
-        colar_card(fundo, pegar(imagens, i), x, y, card_w, card_h, i == 0)
-
-    return fundo
-
-
-def layout_6_hero_mais_5(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    hero_w = 620
-    side_w = W - m * 2 - hero_w - e
-
-    colar_card(fundo, pegar(imagens, 0), m, m, hero_w, H - m * 2, True)
-
-    small_h = (H - m * 2 - e * 4) // 5
-    x = m + hero_w + e
-
-    for i in range(5):
-        colar_card(fundo, pegar(imagens, i + 1), x, m + i * (small_h + e), side_w, small_h)
-
-    return fundo
-
-
-def layout_6_mosaico_cheio(fundo, imagens):
-    m, e = 10, 8
-    W, H = fundo.size
-
-    topo_h = 520
-    baixo_h = H - m * 2 - topo_h - e
-
-    hero_w = 640
-    side_w = W - m * 2 - hero_w - e
-
-    colar_card(fundo, pegar(imagens, 0), m, m, hero_w, topo_h, True)
-
-    x_side = m + hero_w + e
-    side_h = (topo_h - e) // 2
-
-    colar_card(fundo, pegar(imagens, 1), x_side, m, side_w, side_h)
-    colar_card(fundo, pegar(imagens, 2), x_side, m + side_h + e, side_w, side_h)
-
-    baixo_w = (W - m * 2 - e * 2) // 3
-    y = m + topo_h + e
-
-    for i in range(3):
-        x = m + i * (baixo_w + e)
-        colar_card(fundo, pegar(imagens, i + 3), x, y, baixo_w, baixo_h)
-
-    return fundo
-
-
-def escolher_layout(qtd):
-    if qtd >= 6:
-        return random.choice([
-            layout_6_grade_2x3,
-            layout_6_hero_mais_5,
-            layout_6_mosaico_cheio,
-        ])
-
-    if qtd == 5:
-        return random.choice([
-            layout_5_hero_topo_4baixo,
-            layout_5_mosaico,
-            layout_5_hero_direita,
-        ])
-
-    return random.choice([
-        layout_4_hero_direita,
-        layout_4_hero_esquerda,
-        layout_4_grade_2x2,
-        layout_4_topo,
-    ])
 
 
 def criar_colagem(imagens_top):
@@ -323,7 +120,11 @@ def criar_colagem(imagens_top):
         reverse=True,
     )
 
-    imagens_ordenadas = imagens_ordenadas[:6]
+    imagens_ordenadas = imagens_ordenadas[:4]
+
+    if len(imagens_ordenadas) < 4:
+        print("Menos de 4 imagens disponíveis para colagem.")
+        return None
 
     maior = imagens_ordenadas[0]
     demais = imagens_ordenadas[1:]
@@ -333,8 +134,8 @@ def criar_colagem(imagens_top):
 
     fundo = Image.new("RGB", (1080, 1080), FUNDO)
 
-    layout = escolher_layout(len(imagens))
-    fundo = layout(fundo, imagens)
+    layout = escolher_layout_4()
+    fundo = desenhar_layout(fundo, imagens, layout)
 
     caminho_logo = baixar_logo()
     fundo = aplicar_marca_dagua(fundo, caminho_logo)
