@@ -14,8 +14,8 @@ from config import (
 
 from drive_google import (
     baixar_imagens_novas,
+    baixar_imagens_usadas,
     mover_para_usados,
-    reciclar_usados_para_novos,
 )
 
 from analisador_roi import selecionar_top_roi
@@ -30,18 +30,77 @@ def limpar_temp():
     os.makedirs(PASTA_TEMP, exist_ok=True)
 
 
-def obter_imagens_para_post():
-    imagens = baixar_imagens_novas(limite=LIMITE_IMAGENS_RECENTES)
+def remover_duplicadas(imagens):
+    vistos = set()
+    resultado = []
 
-    if len(imagens) >= QUANTIDADE_COLAGEM:
-        return imagens
+    for img in imagens:
+        file_id = img.get("id")
 
-    print("Poucas imagens em 01_NOVOS. Reciclando 02_USADOS...")
+        if file_id in vistos:
+            continue
 
-    total = reciclar_usados_para_novos()
-    print(f"{total} imagens recicladas de 02_USADOS para 01_NOVOS.")
+        vistos.add(file_id)
+        resultado.append(img)
 
-    return baixar_imagens_novas(limite=LIMITE_IMAGENS_RECENTES)
+    return resultado
+
+
+def completar_com_usadas(top_novas):
+    faltam = QUANTIDADE_COLAGEM - len(top_novas)
+
+    if faltam <= 0:
+        return top_novas
+
+    print(f"Faltam {faltam} imagens. Buscando complemento em 02_USADOS...")
+
+    usadas = baixar_imagens_usadas(limite=LIMITE_IMAGENS_RECENTES)
+
+    if not usadas:
+        print("Nenhuma imagem encontrada em 02_USADOS.")
+        return top_novas
+
+    ids_ja_usados = {img["id"] for img in top_novas}
+    usadas = [img for img in usadas if img["id"] not in ids_ja_usados]
+
+    if not usadas:
+        print("02_USADOS não possui imagens diferentes das já selecionadas.")
+        return top_novas
+
+    print(f"{len(usadas)} imagens encontradas em 02_USADOS.")
+
+    top_usadas = selecionar_top_roi(usadas, quantidade=faltam)
+
+    if not top_usadas:
+        print("Nenhuma imagem de 02_USADOS passou no ROI mínimo.")
+        return top_novas
+
+    print("Complemento vindo de 02_USADOS:")
+    for item in top_usadas:
+        print(f"{item['nome']} | ROI: {item['roi']}%")
+
+    return remover_duplicadas(top_novas + top_usadas)[:QUANTIDADE_COLAGEM]
+
+
+def selecionar_imagens_para_post():
+    print("Buscando imagens em 01_NOVOS...")
+    novas = baixar_imagens_novas(limite=LIMITE_IMAGENS_RECENTES)
+
+    print(f"{len(novas)} imagens encontradas em 01_NOVOS.")
+
+    if not novas:
+        top_novas = []
+    else:
+        print("Analisando ROI das imagens novas...")
+        top_novas = selecionar_top_roi(novas, quantidade=QUANTIDADE_COLAGEM)
+
+    if len(top_novas) >= QUANTIDADE_COLAGEM:
+        return top_novas[:QUANTIDADE_COLAGEM]
+
+    print("Poucas imagens novas passaram no ROI mínimo.")
+    selecionadas = completar_com_usadas(top_novas)
+
+    return selecionadas
 
 
 def executar():
@@ -51,33 +110,28 @@ def executar():
     try:
         limpar_temp()
 
-        print("Buscando imagens...")
-        imagens = obter_imagens_para_post()
-
-        if len(imagens) < QUANTIDADE_COLAGEM:
-            print("Não há imagens suficientes para criar a colagem.")
-            return
-
-        print(f"{len(imagens)} imagens encontradas.")
-
-        print("Analisando ROI e escolhendo maiores rentabilidades...")
-        top = selecionar_top_roi(imagens, quantidade=QUANTIDADE_COLAGEM)
+        top = selecionar_imagens_para_post()
 
         if len(top) < QUANTIDADE_COLAGEM:
-            print("Poucas imagens passaram no ROI mínimo.")
+            print("Não há imagens suficientes nem em 01_NOVOS nem em 02_USADOS.")
             return
 
-        print("Selecionadas:")
+        print("Selecionadas finais:")
         for item in top:
-            print(f"{item['nome']} | ROI: {item['roi']}%")
+            origem = item.get("origem", "desconhecida")
+            print(f"{item['nome']} | ROI: {item['roi']}% | origem: {origem}")
 
         print("Criando colagem com maior ROI em destaque...")
         colagem = criar_colagem(top)
 
+        if not colagem:
+            print("Falha ao criar colagem.")
+            return
+
         print("Enviando para Telegram...")
         asyncio.run(enviar_post(colagem))
 
-        print("Movendo imagens usadas para 02_USADOS...")
+        print("Movendo somente imagens novas para 02_USADOS...")
         mover_para_usados(top)
 
         print("Finalizado com sucesso.")

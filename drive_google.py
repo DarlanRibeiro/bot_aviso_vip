@@ -1,17 +1,18 @@
 import os
 import io
 import json
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-
 
 from config import (
     GOOGLE_SERVICE_ACCOUNT_JSON,
     GOOGLE_SERVICE_ACCOUNT_FILE,
     GOOGLE_DRIVE_NOVOS_FOLDER_ID,
     GOOGLE_DRIVE_USADOS_FOLDER_ID,
-    PASTA_PRINTS,GOOGLE_DRIVE_LOGOS_FOLDER_ID,
+    GOOGLE_DRIVE_LOGOS_FOLDER_ID,
+    PASTA_PRINTS,
 )
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -60,7 +61,10 @@ def baixar_imagem(file_id, nome_arquivo):
     nome_limpo = f"{file_id}_{nome_arquivo}".replace("/", "_").replace("\\", "_")
     caminho = os.path.join(PASTA_PRINTS, nome_limpo)
 
-    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+    request = service.files().get_media(
+        fileId=file_id,
+        supportsAllDrives=True,
+    )
 
     with io.FileIO(caminho, "wb") as arquivo:
         downloader = MediaIoBaseDownload(arquivo, request)
@@ -72,8 +76,8 @@ def baixar_imagem(file_id, nome_arquivo):
     return caminho
 
 
-def baixar_imagens_novas(limite=80):
-    arquivos = listar_imagens(GOOGLE_DRIVE_NOVOS_FOLDER_ID, limite=limite)
+def baixar_imagens_da_pasta(folder_id, origem, limite=80):
+    arquivos = listar_imagens(folder_id, limite=limite)
     imagens = []
 
     for arquivo in arquivos:
@@ -84,15 +88,36 @@ def baixar_imagens_novas(limite=80):
             "nome": arquivo["name"],
             "modifiedTime": arquivo.get("modifiedTime"),
             "caminho": caminho,
+            "origem": origem,
         })
 
     return imagens
+
+
+def baixar_imagens_novas(limite=80):
+    return baixar_imagens_da_pasta(
+        GOOGLE_DRIVE_NOVOS_FOLDER_ID,
+        origem="novos",
+        limite=limite,
+    )
+
+
+def baixar_imagens_usadas(limite=80):
+    return baixar_imagens_da_pasta(
+        GOOGLE_DRIVE_USADOS_FOLDER_ID,
+        origem="usados",
+        limite=limite,
+    )
 
 
 def mover_para_usados(imagens):
     service = get_service()
 
     for img in imagens:
+        if img.get("origem") != "novos":
+            print(f"Não mover: {img.get('nome')} já veio de 02_USADOS.")
+            continue
+
         file_id = img["id"]
 
         arquivo = service.files().get(
@@ -111,6 +136,8 @@ def mover_para_usados(imagens):
             supportsAllDrives=True,
         ).execute()
 
+        print(f"Movida para 02_USADOS: {img.get('nome')}")
+
 
 def reciclar_usados_para_novos():
     service = get_service()
@@ -126,6 +153,7 @@ def reciclar_usados_para_novos():
         ).execute()
 
     return len(usados)
+
 
 def baixar_logo():
     service = get_service()
