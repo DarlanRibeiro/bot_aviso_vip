@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import Image, ImageFilter
 
 FUNDO = (5, 9, 22)
 
@@ -63,8 +63,6 @@ def expandir_para_proporcao(x1, y1, x2, y2, img_w, img_h, box_w, box_h):
 
     elif crop_ratio > target_ratio:
         novo_h = crop_w / target_ratio
-
-        # Mantém o topo fixo para não cortar usuário
         y2 = y1 + novo_h
 
     if x1 < 0:
@@ -87,15 +85,57 @@ def expandir_para_proporcao(x1, y1, x2, y2, img_w, img_h, box_w, box_h):
     return int(x1), int(y1), int(x2), int(y2)
 
 
-def preencher_card_sem_distorcer(recorte, tamanho):
+def preencher_card_sem_distorcer(recorte, tamanho, contain=False):
     """
     Preenche o card sem distorcer.
-    Usa resize proporcional e crop central se sobrar.
+
+    contain=False:
+    - modo COVER;
+    - preenche todo o espaço;
+    - pode cortar;
+    - usado nos cards normais e destaque lateral.
+
+    contain=True:
+    - modo CONTAIN;
+    - mostra a imagem inteira;
+    - não corta ROI, moeda nem informações importantes;
+    - usado no destaque superior.
     """
 
     box_w, box_h = tamanho
     img_w, img_h = recorte.size
 
+    if contain:
+        fundo = Image.new("RGB", (box_w, box_h), FUNDO)
+
+        # Cria fundo borrado para não ficar com laterais vazias.
+        escala_fundo = max(box_w / img_w, box_h / img_h)
+        bg_w = int(img_w * escala_fundo)
+        bg_h = int(img_h * escala_fundo)
+
+        fundo_blur = recorte.resize((bg_w, bg_h), Image.Resampling.LANCZOS)
+        x_bg = (bg_w - box_w) // 2
+        y_bg = (bg_h - box_h) // 2
+        fundo_blur = fundo_blur.crop((x_bg, y_bg, x_bg + box_w, y_bg + box_h))
+        fundo_blur = fundo_blur.filter(ImageFilter.GaussianBlur(radius=18))
+
+        fundo.paste(fundo_blur, (0, 0))
+
+        # Imagem principal inteira, sem corte.
+        escala = min(box_w / img_w, box_h / img_h)
+        novo_w = int(img_w * escala)
+        novo_h = int(img_h * escala)
+
+        imagem_final = recorte.resize((novo_w, novo_h), Image.Resampling.LANCZOS)
+
+        x = (box_w - novo_w) // 2
+        y = (box_h - novo_h) // 2
+
+        fundo.paste(imagem_final, (x, y))
+
+        return fundo
+
+    # Modo COVER original
     escala = max(box_w / img_w, box_h / img_h)
 
     novo_w = int(img_w * escala)
@@ -104,7 +144,7 @@ def preencher_card_sem_distorcer(recorte, tamanho):
     recorte = recorte.resize((novo_w, novo_h), Image.Resampling.LANCZOS)
 
     x = (novo_w - box_w) // 2
-    y = 0  # topo preservado
+    y = 0
 
     if y + box_h > novo_h:
         y = max(0, novo_h - box_h)
@@ -117,6 +157,15 @@ def preencher_card_sem_distorcer(recorte, tamanho):
 def camera_virtual(img, tamanho, bbox_foco=None, bbox_moeda=None, destaque=False):
     img_w, img_h = img.size
     box_w, box_h = tamanho
+
+    destaque_superior = destaque and box_w > box_h
+
+    if destaque_superior:
+        return preencher_card_sem_distorcer(
+            recorte=img,
+            tamanho=tamanho,
+            contain=True,
+        )
 
     x1, y1, x2, y2 = calcular_crop_seguro(
         img_w=img_w,
@@ -138,4 +187,8 @@ def camera_virtual(img, tamanho, bbox_foco=None, bbox_moeda=None, destaque=False
 
     recorte = img.crop((x1, y1, x2, y2))
 
-    return preencher_card_sem_distorcer(recorte, tamanho)
+    return preencher_card_sem_distorcer(
+        recorte=recorte,
+        tamanho=tamanho,
+        contain=False,
+    )
