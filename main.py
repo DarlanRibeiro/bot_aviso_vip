@@ -6,7 +6,6 @@ from datetime import datetime
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from config import (
-    INTERVALO_HORAS,
     LIMITE_IMAGENS_RECENTES,
     QUANTIDADE_COLAGEM,
     PASTA_TEMP,
@@ -143,16 +142,17 @@ def executar():
 
 
 def iniciar_agendador():
-    print("BOT AVISO VIP iniciado no Railway.")
-    print(f"Intervalo: {INTERVALO_HORAS} horas.")
+    print("BOT AVISO VIP iniciado.")
+    print("Agendamento: Segunda a Sexta às 12:00.")
 
     scheduler = BlockingScheduler()
 
     scheduler.add_job(
         executar,
-        "interval",
-        hours=INTERVALO_HORAS,
-        next_run_time=datetime.now(),
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=12,
+        minute=0,
     )
 
     scheduler.start()
