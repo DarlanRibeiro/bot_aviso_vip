@@ -11,7 +11,13 @@ reader = easyocr.Reader(["en"], gpu=False)
 def bbox_para_lista(bbox):
     xs = [p[0] for p in bbox]
     ys = [p[1] for p in bbox]
-    return [min(xs), min(ys), max(xs), max(ys)]
+
+    return [
+        min(xs),
+        min(ys),
+        max(xs),
+        max(ys),
+    ]
 
 
 def unir_bbox(bboxes):
@@ -23,15 +29,79 @@ def unir_bbox(bboxes):
     ]
 
 
+def normalizar_numero_percentual(valor):
+    """
+    Converte exemplos como:
+
+    911,30       -> 911.30
+    925.83       -> 925.83
+    1.007,45     -> 1007.45
+    3.014,48     -> 3014.48
+    1,007.45     -> 1007.45
+    """
+
+    valor = (
+        valor
+        .replace("+", "")
+        .replace(" ", "")
+        .strip()
+    )
+
+    if not valor:
+        return None
+
+    if "," in valor and "." in valor:
+        # O último separador é tratado como decimal.
+        if valor.rfind(",") > valor.rfind("."):
+            valor = valor.replace(".", "")
+            valor = valor.replace(",", ".")
+        else:
+            valor = valor.replace(",", "")
+
+    elif "," in valor:
+        partes = valor.split(",")
+
+        if len(partes) == 2 and len(partes[1]) <= 2:
+            valor = valor.replace(",", ".")
+        else:
+            valor = valor.replace(",", "")
+
+    elif "." in valor:
+        partes = valor.split(".")
+
+        # Um único ponto seguido de 3 algarismos é tratado
+        # como separador de milhar: 1.007 -> 1007.
+        if (
+            len(partes) > 2
+            or (
+                len(partes) == 2
+                and len(partes[1]) == 3
+                and len(partes[0]) <= 3
+            )
+        ):
+            valor = valor.replace(".", "")
+
+    try:
+        return float(valor)
+    except ValueError:
+        return None
+
+
 def extrair_valor_percentual(texto):
-    match = re.search(r"(\+?\d{1,5}(?:[.,]\d{1,2})?)\s*%", texto)
+    """
+    Localiza um número seguido de % e normaliza
+    separadores brasileiros e internacionais.
+    """
+
+    match = re.search(
+        r"([+]?\s*\d[\d.,\s]{0,20})\s*%",
+        texto,
+    )
+
     if not match:
         return None
 
-    try:
-        return float(match.group(1).replace("+", "").replace(",", "."))
-    except ValueError:
-        return None
+    return normalizar_numero_percentual(match.group(1))
 
 
 def destacar_verde(caminho):
@@ -45,11 +115,30 @@ def destacar_verde(caminho):
     verde_baixo = np.array([35, 30, 30])
     verde_alto = np.array([95, 255, 255])
 
-    mascara = cv2.inRange(hsv, verde_baixo, verde_alto)
-    resultado = cv2.bitwise_and(imagem, imagem, mask=mascara)
+    mascara = cv2.inRange(
+        hsv,
+        verde_baixo,
+        verde_alto,
+    )
 
-    cinza = cv2.cvtColor(resultado, cv2.COLOR_BGR2GRAY)
-    cinza = cv2.resize(cinza, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
+    resultado = cv2.bitwise_and(
+        imagem,
+        imagem,
+        mask=mascara,
+    )
+
+    cinza = cv2.cvtColor(
+        resultado,
+        cv2.COLOR_BGR2GRAY,
+    )
+
+    cinza = cv2.resize(
+        cinza,
+        None,
+        fx=2.5,
+        fy=2.5,
+        interpolation=cv2.INTER_CUBIC,
+    )
 
     return cinza
 
@@ -58,16 +147,32 @@ def analisar_roi(imagem_info):
     caminho = imagem_info["caminho"]
 
     imagem_original = cv2.imread(caminho)
+
     if imagem_original is None:
-        return {**imagem_info, "roi": 0, "bbox_foco": None, "bbox_moeda": None, "valida": False}
+        return {
+            **imagem_info,
+            "roi": 0,
+            "bbox_foco": None,
+            "bbox_moeda": None,
+            "valida": False,
+        }
 
     escala_ocr = 2.5
     imagem_processada = destacar_verde(caminho)
 
     if imagem_processada is None:
-        return {**imagem_info, "roi": 0, "bbox_foco": None, "bbox_moeda": None, "valida": False}
+        return {
+            **imagem_info,
+            "roi": 0,
+            "bbox_foco": None,
+            "bbox_moeda": None,
+            "valida": False,
+        }
 
-    resultados_verde = reader.readtext(imagem_processada, detail=1)
+    resultados_verde = reader.readtext(
+        imagem_processada,
+        detail=1,
+    )
 
     melhor_roi = 0
     bbox_roi = None
@@ -77,7 +182,9 @@ def analisar_roi(imagem_info):
 
         if valor is not None and valor > melhor_roi:
             melhor_roi = valor
+
             b = bbox_para_lista(bbox)
+
             bbox_roi = [
                 b[0] / escala_ocr,
                 b[1] / escala_ocr,
@@ -85,7 +192,10 @@ def analisar_roi(imagem_info):
                 b[3] / escala_ocr,
             ]
 
-    resultados_full = reader.readtext(caminho, detail=1)
+    resultados_full = reader.readtext(
+        caminho,
+        detail=1,
+    )
 
     bboxes_importantes = []
     bbox_moeda = None
@@ -97,12 +207,10 @@ def analisar_roi(imagem_info):
         t = texto.upper()
         b = bbox_para_lista(bbox)
 
-        # Começo da área útil: moeda/par
         if "USDT" in t:
             bbox_moeda = b
             bboxes_importantes.append(b)
 
-        # Informações úteis, sem incluir usuário/data/hora
         if (
             "LONG" in t
             or "SHORT" in t
@@ -118,7 +226,11 @@ def analisar_roi(imagem_info):
         ):
             bboxes_importantes.append(b)
 
-    bbox_foco = unir_bbox(bboxes_importantes) if bboxes_importantes else None
+    bbox_foco = (
+        unir_bbox(bboxes_importantes)
+        if bboxes_importantes
+        else None
+    )
 
     return {
         **imagem_info,
@@ -139,11 +251,21 @@ def selecionar_top_roi(imagens, quantidade=4):
             if item["valida"]:
                 analisadas.append(item)
             else:
-                print(f"Ignorada: {imagem.get('nome')} | ROI: {item['roi']}%")
+                print(
+                    f"Ignorada: {imagem.get('nome')} "
+                    f"| ROI: {item['roi']}%"
+                )
 
         except Exception as erro:
-            print(f"Erro analisando {imagem.get('nome')}: {erro}")
+            print(
+                f"Erro analisando "
+                f"{imagem.get('nome')}: {erro}"
+            )
 
-    analisadas = sorted(analisadas, key=lambda x: x["roi"], reverse=True)
+    analisadas = sorted(
+        analisadas,
+        key=lambda x: x["roi"],
+        reverse=True,
+    )
 
     return analisadas[:quantidade]

@@ -4,7 +4,10 @@ import json
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import (
+    MediaIoBaseDownload,
+    MediaIoBaseUpload,
+)
 
 from config import (
     GOOGLE_SERVICE_ACCOUNT_JSON,
@@ -17,10 +20,13 @@ from config import (
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
+NOME_ARQUIVO_HISTORICO = "_historico_postagens.json"
+
 
 def get_service():
     if GOOGLE_SERVICE_ACCOUNT_JSON:
         info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+
         creds = service_account.Credentials.from_service_account_info(
             info,
             scopes=SCOPES,
@@ -31,7 +37,12 @@ def get_service():
             scopes=SCOPES,
         )
 
-    return build("drive", "v3", credentials=creds)
+    return build(
+        "drive",
+        "v3",
+        credentials=creds,
+        cache_discovery=False,
+    )
 
 
 def listar_imagens(folder_id, limite=80):
@@ -45,10 +56,20 @@ def listar_imagens(folder_id, limite=80):
 
     resultado = service.files().list(
         q=query,
-        fields="files(id,name,mimeType,modifiedTime,createdTime,parents)",
+        fields=(
+            "files("
+            "id,"
+            "name,"
+            "mimeType,"
+            "modifiedTime,"
+            "createdTime,"
+            "parents"
+            ")"
+        ),
         orderBy="modifiedTime desc",
         pageSize=limite,
         supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
     ).execute()
 
     return resultado.get("files", [])
@@ -56,9 +77,15 @@ def listar_imagens(folder_id, limite=80):
 
 def baixar_imagem(file_id, nome_arquivo):
     service = get_service()
+
     os.makedirs(PASTA_PRINTS, exist_ok=True)
 
-    nome_limpo = f"{file_id}_{nome_arquivo}".replace("/", "_").replace("\\", "_")
+    nome_limpo = (
+        f"{file_id}_{nome_arquivo}"
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
     caminho = os.path.join(PASTA_PRINTS, nome_limpo)
 
     request = service.files().get_media(
@@ -77,26 +104,40 @@ def baixar_imagem(file_id, nome_arquivo):
 
 
 def baixar_imagens_da_pasta(folder_id, origem, limite=80):
-    arquivos = listar_imagens(folder_id, limite=limite)
+    arquivos = listar_imagens(
+        folder_id=folder_id,
+        limite=limite,
+    )
+
     imagens = []
 
     for arquivo in arquivos:
-        caminho = baixar_imagem(arquivo["id"], arquivo["name"])
+        try:
+            caminho = baixar_imagem(
+                file_id=arquivo["id"],
+                nome_arquivo=arquivo["name"],
+            )
 
-        imagens.append({
-            "id": arquivo["id"],
-            "nome": arquivo["name"],
-            "modifiedTime": arquivo.get("modifiedTime"),
-            "caminho": caminho,
-            "origem": origem,
-        })
+            imagens.append({
+                "id": arquivo["id"],
+                "nome": arquivo["name"],
+                "modifiedTime": arquivo.get("modifiedTime"),
+                "createdTime": arquivo.get("createdTime"),
+                "caminho": caminho,
+                "origem": origem,
+            })
+
+        except Exception as erro:
+            print(
+                f"Erro baixando {arquivo.get('name')}: {erro}"
+            )
 
     return imagens
 
 
 def baixar_imagens_novas(limite=80):
     return baixar_imagens_da_pasta(
-        GOOGLE_DRIVE_NOVOS_FOLDER_ID,
+        folder_id=GOOGLE_DRIVE_NOVOS_FOLDER_ID,
         origem="novos",
         limite=limite,
     )
@@ -104,55 +145,260 @@ def baixar_imagens_novas(limite=80):
 
 def baixar_imagens_usadas(limite=80):
     return baixar_imagens_da_pasta(
-        GOOGLE_DRIVE_USADOS_FOLDER_ID,
+        folder_id=GOOGLE_DRIVE_USADOS_FOLDER_ID,
         origem="usados",
         limite=limite,
     )
 
 
 def mover_para_usados(imagens):
+    """
+    Move para 02_USADOS todas as imagens recebidas
+    cuja origem seja 01_NOVOS.
+
+    Não existe nenhuma regra para manter uma imagem
+    obrigatoriamente em 01_NOVOS.
+    """
+
+    if not imagens:
+        return 0
+
     service = get_service()
+    total_movidas = 0
+
+    print("=" * 60)
+    print("MOVENDO IMAGENS DE 01_NOVOS PARA 02_USADOS")
 
     for img in imagens:
-        if img.get("origem") != "novos":
-            print(f"Não mover: {img.get('nome')} já veio de 02_USADOS.")
+        nome = img.get("nome", "sem nome")
+        origem = img.get("origem")
+        file_id = img.get("id")
+
+        if origem != "novos":
             continue
 
-        file_id = img["id"]
+        if not file_id:
+            print(f"Não foi possível mover {nome}: ID ausente.")
+            continue
 
-        arquivo = service.files().get(
-            fileId=file_id,
-            fields="parents",
-            supportsAllDrives=True,
-        ).execute()
+        try:
+            arquivo = service.files().get(
+                fileId=file_id,
+                fields="id,name,parents",
+                supportsAllDrives=True,
+            ).execute()
 
-        parents = ",".join(arquivo.get("parents", []))
+            parents = arquivo.get("parents", [])
 
-        service.files().update(
-            fileId=file_id,
-            addParents=GOOGLE_DRIVE_USADOS_FOLDER_ID,
-            removeParents=parents,
-            fields="id, parents",
-            supportsAllDrives=True,
-        ).execute()
+            if GOOGLE_DRIVE_USADOS_FOLDER_ID in parents:
+                print(f"Já está em 02_USADOS: {nome}")
+                continue
 
-        print(f"Movida para 02_USADOS: {img.get('nome')}")
+            parents_para_remover = [
+                parent_id
+                for parent_id in parents
+                if parent_id != GOOGLE_DRIVE_USADOS_FOLDER_ID
+            ]
+
+            parametros = {
+                "fileId": file_id,
+                "addParents": GOOGLE_DRIVE_USADOS_FOLDER_ID,
+                "fields": "id,name,parents",
+                "supportsAllDrives": True,
+            }
+
+            if parents_para_remover:
+                parametros["removeParents"] = ",".join(
+                    parents_para_remover
+                )
+
+            service.files().update(**parametros).execute()
+
+            total_movidas += 1
+            print(f"Movida para 02_USADOS: {nome}")
+
+        except Exception as erro:
+            print(f"ERRO movendo {nome}: {erro}")
+
+    print(f"Total movidas para 02_USADOS: {total_movidas}")
+    print("=" * 60)
+
+    return total_movidas
 
 
 def reciclar_usados_para_novos():
     service = get_service()
-    usados = listar_imagens(GOOGLE_DRIVE_USADOS_FOLDER_ID, limite=1000)
+
+    usados = listar_imagens(
+        GOOGLE_DRIVE_USADOS_FOLDER_ID,
+        limite=1000,
+    )
+
+    total = 0
 
     for arquivo in usados:
-        service.files().update(
-            fileId=arquivo["id"],
-            addParents=GOOGLE_DRIVE_NOVOS_FOLDER_ID,
-            removeParents=GOOGLE_DRIVE_USADOS_FOLDER_ID,
-            fields="id, parents",
-            supportsAllDrives=True,
-        ).execute()
+        try:
+            service.files().update(
+                fileId=arquivo["id"],
+                addParents=GOOGLE_DRIVE_NOVOS_FOLDER_ID,
+                removeParents=GOOGLE_DRIVE_USADOS_FOLDER_ID,
+                fields="id,parents",
+                supportsAllDrives=True,
+            ).execute()
 
-    return len(usados)
+            total += 1
+
+        except Exception as erro:
+            print(
+                f"Erro reciclando {arquivo.get('name')}: {erro}"
+            )
+
+    return total
+
+
+def buscar_arquivo_historico(service):
+    nome_seguro = NOME_ARQUIVO_HISTORICO.replace("'", "\\'")
+
+    query = (
+        f"'{GOOGLE_DRIVE_USADOS_FOLDER_ID}' in parents "
+        f"and name = '{nome_seguro}' "
+        f"and trashed = false"
+    )
+
+    resultado = service.files().list(
+        q=query,
+        fields="files(id,name,mimeType,modifiedTime)",
+        pageSize=10,
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
+
+    arquivos = resultado.get("files", [])
+
+    if not arquivos:
+        return None
+
+    return arquivos[0]
+
+
+def historico_padrao():
+    return {
+        "usadas_no_ciclo": [],
+        "ultimo_lote": [],
+        "numero_ciclo": 1,
+    }
+
+
+def carregar_historico_postagens():
+    """
+    Carrega o histórico persistente salvo no Google Drive.
+    """
+
+    service = get_service()
+
+    try:
+        arquivo = buscar_arquivo_historico(service)
+
+        if not arquivo:
+            print(
+                "Histórico ainda não existe. "
+                "Será iniciado um novo ciclo."
+            )
+            return historico_padrao()
+
+        request = service.files().get_media(
+            fileId=arquivo["id"],
+            supportsAllDrives=True,
+        )
+
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+
+        concluido = False
+
+        while not concluido:
+            _, concluido = downloader.next_chunk()
+
+        buffer.seek(0)
+
+        conteudo = buffer.read().decode("utf-8")
+        historico = json.loads(conteudo)
+
+        if not isinstance(historico, dict):
+            return historico_padrao()
+
+        print(
+            "Histórico carregado: "
+            f"ciclo {historico.get('numero_ciclo', 1)} | "
+            f"{len(historico.get('usadas_no_ciclo', []))} "
+            "imagens usadas."
+        )
+
+        return historico
+
+    except Exception as erro:
+        print(f"Erro carregando histórico: {erro}")
+        print("Usando histórico vazio temporariamente.")
+
+        return historico_padrao()
+
+
+def salvar_historico_postagens(historico):
+    """
+    Salva o histórico no Google Drive.
+
+    O JSON fica dentro de 02_USADOS, mas não aparece
+    na seleção porque listar_imagens busca somente imagens.
+    """
+
+    service = get_service()
+
+    conteudo = json.dumps(
+        historico,
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(conteudo),
+        mimetype="application/json",
+        resumable=False,
+    )
+
+    try:
+        arquivo = buscar_arquivo_historico(service)
+
+        if arquivo:
+            service.files().update(
+                fileId=arquivo["id"],
+                media_body=media,
+                fields="id,name,modifiedTime",
+                supportsAllDrives=True,
+            ).execute()
+
+            print("Histórico de postagens atualizado no Drive.")
+
+        else:
+            metadata = {
+                "name": NOME_ARQUIVO_HISTORICO,
+                "mimeType": "application/json",
+                "parents": [GOOGLE_DRIVE_USADOS_FOLDER_ID],
+            }
+
+            service.files().create(
+                body=metadata,
+                media_body=media,
+                fields="id,name",
+                supportsAllDrives=True,
+            ).execute()
+
+            print("Histórico de postagens criado no Drive.")
+
+        return True
+
+    except Exception as erro:
+        print(f"ERRO salvando histórico: {erro}")
+        return False
 
 
 def baixar_logo():
@@ -170,6 +416,7 @@ def baixar_logo():
         orderBy="modifiedTime desc",
         pageSize=10,
         supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
     ).execute()
 
     arquivos = resultado.get("files", [])
