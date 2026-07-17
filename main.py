@@ -29,6 +29,19 @@ from telegram_post import enviar_post
 
 FUSO_BRASIL = ZoneInfo("America/Bahia")
 
+# =====================================================
+# MODO TESTE
+# =====================================================
+# Quando True:
+# - executa uma postagem imediatamente ao iniciar
+# - depois continua aguardando o horário agendado
+#
+# Quando False:
+# - apenas aguarda o agendamento normal
+# =====================================================
+
+TEST_ON_START = True
+
 
 def agora_brasil():
     return datetime.now(FUSO_BRASIL)
@@ -256,4 +269,13 @@ def iniciar_agendador():
 
 
 if __name__ == "__main__":
+
+    if TEST_ON_START:
+        print("=" * 60)
+        print("MODO TESTE ATIVADO")
+        print("Executando postagem imediatamente...")
+        print("=" * 60)
+
+        executar()
+
     iniciar_agendador()
