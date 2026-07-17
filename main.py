@@ -40,7 +40,7 @@ FUSO_BRASIL = ZoneInfo("America/Bahia")
 # - apenas aguarda o agendamento normal
 # =====================================================
 
-TEST_ON_START = True
+TEST_ON_START = False
 
 
 def agora_brasil():
