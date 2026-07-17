@@ -1,3 +1,13 @@
+import warnings
+
+# Oculta apenas o aviso repetitivo do PyTorch sobre pin_memory.
+# Ele não representa erro e não afeta o funcionamento do OCR.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*pin_memory.*no accelerator.*",
+    category=UserWarning,
+)
+
 import re
 import cv2
 import easyocr
@@ -5,7 +15,12 @@ import numpy as np
 
 from config import ROI_MINIMO
 
-reader = easyocr.Reader(["en"], gpu=False)
+
+reader = easyocr.Reader(
+    ["en"],
+    gpu=False,
+    verbose=False,
+)
 
 
 def bbox_para_lista(bbox):
