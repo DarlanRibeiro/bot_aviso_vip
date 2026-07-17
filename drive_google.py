@@ -1,9 +1,11 @@
 import os
 import io
 import json
+import time
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import (
     MediaIoBaseDownload,
     MediaIoBaseUpload,
@@ -75,9 +77,11 @@ def listar_imagens(folder_id, limite=80):
     return resultado.get("files", [])
 
 
-def baixar_imagem(file_id, nome_arquivo):
-    service = get_service()
-
+def baixar_imagem(
+    file_id,
+    nome_arquivo,
+    max_tentativas=4,
+):
     os.makedirs(PASTA_PRINTS, exist_ok=True)
 
     nome_limpo = (
@@ -86,21 +90,88 @@ def baixar_imagem(file_id, nome_arquivo):
         .replace("\\", "_")
     )
 
-    caminho = os.path.join(PASTA_PRINTS, nome_limpo)
-
-    request = service.files().get_media(
-        fileId=file_id,
-        supportsAllDrives=True,
+    caminho = os.path.join(
+        PASTA_PRINTS,
+        nome_limpo,
     )
 
-    with io.FileIO(caminho, "wb") as arquivo:
-        downloader = MediaIoBaseDownload(arquivo, request)
-        concluido = False
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            service = get_service()
 
-        while not concluido:
-            _, concluido = downloader.next_chunk()
+            request = service.files().get_media(
+                fileId=file_id,
+                supportsAllDrives=True,
+            )
 
-    return caminho
+            # Recomeça o arquivo do zero em cada tentativa.
+            with io.FileIO(caminho, "wb") as arquivo:
+                downloader = MediaIoBaseDownload(
+                    arquivo,
+                    request,
+                    chunksize=1024 * 1024,
+                )
+
+                concluido = False
+
+                while not concluido:
+                    _, concluido = downloader.next_chunk(
+                        num_retries=3
+                    )
+
+            return caminho
+
+        except HttpError as erro:
+            status = getattr(
+                erro.resp,
+                "status",
+                None,
+            )
+
+            erro_temporario = status in {
+                429,
+                500,
+                502,
+                503,
+                504,
+            }
+
+            if (
+                not erro_temporario
+                or tentativa >= max_tentativas
+            ):
+                if os.path.exists(caminho):
+                    try:
+                        os.remove(caminho)
+                    except OSError:
+                        pass
+
+                raise
+
+            espera = 2 ** tentativa
+
+            print(
+                f"Falha temporária baixando "
+                f"{nome_arquivo} "
+                f"(HTTP {status}). "
+                f"Nova tentativa em {espera}s "
+                f"[{tentativa}/{max_tentativas}]..."
+            )
+
+            time.sleep(espera)
+
+        except Exception:
+            if os.path.exists(caminho):
+                try:
+                    os.remove(caminho)
+                except OSError:
+                    pass
+
+            raise
+
+    raise RuntimeError(
+        f"Não foi possível baixar {nome_arquivo}."
+    )
 
 
 def baixar_imagens_da_pasta(folder_id, origem, limite=80):
